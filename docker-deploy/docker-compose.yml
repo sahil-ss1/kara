@@ -1,0 +1,83 @@
+version: '3'
+
+services:
+  app:
+    build:
+      args:
+        user: kara-user
+        uid: 1000
+      context: ..
+      dockerfile: docker-deploy/app/Dockerfile
+    image: kara-php
+    container_name: app
+    restart: unless-stopped
+    working_dir: /var/www/
+    entrypoint: /bin/sh
+    command: [ "-c","
+            php artisan cache:clear &&
+            php artisan view:clear &&
+            php artisan config:cache &&
+            php-fpm",
+    ]
+    depends_on:
+        - db
+    volumes:
+       - shared-volume:/var/www
+    #  - ./:/var/www
+    #  - ./docker-compose/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:rw,delegated
+    networks:
+      - kara
+
+  db:
+    image: mariadb
+    restart: always
+    container_name: db
+    tty: true
+    volumes:
+      - db:/var/lib/mysql
+      # If you want to persist data on the host, comment the line above this one...
+      # and uncomment the line under this one.
+      #- ./docker-compose/db/data:/var/lib/mysql:rw,delegated
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kara}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    ports:
+      - '33006:3306'
+    networks:
+      - kara
+
+  nginx:
+    image: nginx:1.17-alpine
+    restart: unless-stopped
+    container_name: nginx
+    tty: true
+    ports:
+      - 8081:80
+      - 443:443
+    depends_on:
+        - app
+    volumes:
+      #- ./:/var/www
+      - shared-volume:/var/www
+      - ./nginx:/etc/nginx/conf.d/
+    networks:
+      - kara
+
+  #cron:
+  #  build:
+  #    context: ./
+  #    dockerfile: ./docker-compose/cron.dockerfile
+  #  volumes:
+  #    - ./:/var/www
+  #  networks:
+  #    - kara
+
+volumes:
+  db:
+  shared-volume:
+
+networks:
+  kara:
+    driver: bridge
